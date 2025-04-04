@@ -19,27 +19,28 @@ st.set_page_config(page_title="AI Einstein Avatar", page_icon="🧠", layout="wi
 load_dotenv()
 
 # Get API keys from environment variables with fallbacks to empty strings
+# IMPORTANT: Don't show these in the UI
 default_gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 default_heygen_api_key = os.getenv("HEYGEN_API_KEY", "")
 default_openai_api_key = os.getenv("ELEVENLABS_API_KEY", "")  # Using ELEVENLABS key as an alternative for OpenAI
+
+# Use the environment variables directly instead of letting users input them
+gemini_api_key = default_gemini_api_key
+heygen_api_key = default_heygen_api_key
+openai_api_key = default_openai_api_key
+
+# Set the API keys to environment variables
+if gemini_api_key:
+    os.environ["GEMINI_API_KEY"] = gemini_api_key
+if openai_api_key:
+    os.environ["OPENAI_API_KEY"] = openai_api_key
 
 # Sidebar configuration
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", width=250)
     st.markdown("## AI Einstein Configuration")
     
-    # API Keys section
-    st.markdown("### API Keys")
-    
-    # Gemini API key for Einstein bot - pre-filled from .env
-    gemini_api_key = st.text_input("Gemini API Key", value=default_gemini_api_key, type="password",
-                                help="Enter your Gemini API key or use the one from .env file")
-    if gemini_api_key:
-        os.environ["GEMINI_API_KEY"] = gemini_api_key
-    
-    # HeyGen API key for avatar - pre-filled from .env
-    heygen_api_key = st.text_input("HeyGen API Key", value=default_heygen_api_key, type="password",
-                               help="Enter your HeyGen API key or use the one from .env file")
+    # Remove API Keys section from sidebar
     
     # Avatar configuration
     st.markdown("### Avatar Settings")
@@ -66,14 +67,10 @@ with st.sidebar:
         ["Google Speech Recognition", "OpenAI Whisper"]
     )
     
-    if asr_provider == "OpenAI Whisper":
-        openai_api_key = st.text_input("OpenAI API Key", value=default_openai_api_key, type="password",
-                                    help="Enter your OpenAI API key or use the one from .env file")
-        if openai_api_key:
-            os.environ["OPENAI_API_KEY"] = openai_api_key
+    # Removed OpenAI API Key input field
     
     # Reload button
-    if st.button("Reload with new API settings"):
+    if st.button("Reload with new settings"):
         for key in ["chat", "session_id", "player_ready", "access_token", "url"]:
             if key in st.session_state:
                 del st.session_state[key]
@@ -84,7 +81,7 @@ def initialize_einstein_bot():
     # Check for Gemini API key
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        st.error("No Gemini API key found. Please set a Gemini API key in the sidebar.")
+        st.error("Einstein is currently unavailable. Please try again later.")
         return None
     
     genai.configure(api_key=api_key)
@@ -185,11 +182,11 @@ def create_session():
             if 'data' in session_data and 'session_id' in session_data['data']:
                 return session_data['data']
             else:
-                st.error(f"Failed to create session: {session_data}")
+                st.error(f"Failed to create session. Please try again later.")
                 return None
                 
         except Exception as e:
-            st.error(f"Error creating session: {e}")
+            st.error(f"Error creating session. Please try again later.")
             return None
 
 def start_session(session_id):
@@ -209,10 +206,10 @@ def start_session(session_id):
             if start_data.get('code') == 100 or start_data.get('message') == 'success':
                 return True
             else:
-                st.error(f"Failed to start session: {start_data}")
+                st.error(f"Failed to start session. Please try again later.")
                 return False
         except Exception as e:
-            st.error(f"Error starting session: {e}")
+            st.error(f"Error starting session. Please try again later.")
             return False
 
 def send_message_to_avatar(session_id, text):
@@ -242,10 +239,10 @@ def send_message_to_avatar(session_id, text):
                     st.error("Task wasn't completed successfully")
                     return None
             else:
-                st.error(f"Failed to send message: {task_data}")
+                st.error(f"Failed to send message. Please try again.")
                 return None
         except Exception as e:
-            st.error(f"Error sending message: {e}")
+            st.error(f"Error sending message. Please try again.")
             return None
 
 def check_task_status(session_id, task_id, max_attempts=10):
@@ -278,7 +275,7 @@ def check_task_status(session_id, task_id, max_attempts=10):
             else:
                 return False
         except Exception as e:
-            st.error(f"Error checking task status: {e}")
+            st.error(f"Error checking task status")
             return False
     
     # If we've reached max attempts without completion
@@ -301,10 +298,10 @@ def stop_session(session_id):
             if stop_data.get('code') == 100 or stop_data.get('message') == 'success':
                 return True
             else:
-                st.error(f"Failed to stop session: {stop_data}")
+                st.error(f"Failed to stop session. Please try again.")
                 return False
         except Exception as e:
-            st.error(f"Error stopping session: {e}")
+            st.error(f"Error stopping session. Please try again.")
             return False
 
 def google_speech_recognition(audio_bytes, language_hint=None):
@@ -340,7 +337,7 @@ def google_speech_recognition(audio_bytes, language_hint=None):
         except sr.RequestError:
             return "Error connecting to Google Speech Recognition service"
     except Exception as e:
-        st.error(f"Error processing audio: {e}")
+        st.error(f"Error processing audio")
         return "Error processing audio file"
 
 def whisper_asr(audio_bytes, api_key=None):
@@ -348,8 +345,8 @@ def whisper_asr(audio_bytes, api_key=None):
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            st.error("No OpenAI API key found. Please set OPENAI_API_KEY in the sidebar.")
-            return "No API key available for speech recognition"
+            st.error("Speech recognition is currently unavailable. Please try text input instead.")
+            return "Speech recognition service unavailable"
     
     url = "https://api.openai.com/v1/audio/transcriptions"
     headers = {
@@ -371,10 +368,10 @@ def whisper_asr(audio_bytes, api_key=None):
                 if response.status_code == 200:
                     return response.json().get("text", "")
                 else:
-                    st.error(f"Whisper ASR Error: {response.status_code} - {response.text}")
+                    st.error(f"Speech recognition error. Please try text input instead.")
                     return "Error with speech recognition service"
         except Exception as e:
-            st.error(f"Whisper ASR Exception: {str(e)}")
+            st.error(f"Error processing audio. Please try text input instead.")
             return "Error processing audio"
 
 # Get Einstein's response to a user message
@@ -387,7 +384,7 @@ def get_einstein_response(chat, user_message):
         
         return text_response
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error communicating with Einstein. Please try again.")
         # Return bilingual error message
         return "Forgive me, but I cannot answer at this moment. Perhaps we should try another question? / 죄송합니다만, 지금은 답변할 수 없습니다. 다른 질문을 해보시겠어요?"
 
@@ -539,7 +536,7 @@ with col1:
                     st.session_state.player_ready = True
                     st.rerun()
         else:
-            st.error("HeyGen API key is required to start the avatar")
+            st.error("Avatar service is currently unavailable. Please try again later.")
 
 with col2:
     if st.button(stop_button_text, disabled=not st.session_state.session_id):
@@ -647,99 +644,99 @@ with audio_tab:
                         
                         # Refresh the display
                         st.rerun()
-        else:
-            # Show message when audio_input is not available
-            st.warning(audio_not_available)
-            
-            # Suggest file upload as alternative
-            st.write("You can use the 'File Upload' tab to upload audio recordings instead.")
-    
-    with text_tab:
-        # Text input
-        with st.form(key="message_form", clear_on_submit=True):
-            user_input = st.text_input(text_input_label)
-            submit = st.form_submit_button(send_button_text)
-            
-            if submit and user_input:
-                # Detect the language of the user input
-                detected_language = detect_language(user_input)
-                st.session_state.user_language = detected_language
-                
-                # Add user message to chat history
-                st.session_state.chat_history.append({
-                    'role': 'user',
-                    'content': user_input
-                })
-                
-                # Get Einstein's response
-                response_text = get_einstein_response(chat, user_input)
-                st.session_state.current_response = response_text
-                
-                # Add Einstein's response to chat history
-                st.session_state.chat_history.append({
-                    'role': 'assistant',
-                    'content': response_text
-                })
-                
-                # If avatar session is active, make the avatar speak
-                if st.session_state.player_ready and st.session_state.session_id:
-                    with st.spinner("Making Einstein speak..."):
-                        task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-                
-                # Refresh the display
-                st.rerun()
-                
-    with file_tab:
-        # File upload option as a fallback
-        uploaded_file = st.file_uploader(file_upload_text, type=['wav', 'mp3'])
+    else:
+        # Show message when audio_input is not available
+        st.warning(audio_not_available)
         
-        if uploaded_file is not None:
-            audio_bytes = uploaded_file.read()
+        # Suggest file upload as alternative
+        st.write("You can use the 'File Upload' tab to upload audio recordings instead.")
+    
+with text_tab:
+    # Text input
+    with st.form(key="message_form", clear_on_submit=True):
+        user_input = st.text_input(text_input_label)
+        submit = st.form_submit_button(send_button_text)
+        
+        if submit and user_input:
+            # Detect the language of the user input
+            detected_language = detect_language(user_input)
+            st.session_state.user_language = detected_language
             
-            st.audio(audio_bytes, format="audio/wav")
+            # Add user message to chat history
+            st.session_state.chat_history.append({
+                'role': 'user',
+                'content': user_input
+            })
             
-            if st.button("Process Audio"):
-                with st.spinner("Processing audio file..."):
-                    # Process the uploaded audio with selected ASR provider
-                    if asr_provider == "Google Speech Recognition":
-                        user_input = google_speech_recognition(
-                            audio_bytes, 
-                            "Korean" if app_language == "🇰🇷 한국어" else "English"
-                        )
-                    else:  # OpenAI Whisper
-                        user_input = whisper_asr(audio_bytes)
+            # Get Einstein's response
+            response_text = get_einstein_response(chat, user_input)
+            st.session_state.current_response = response_text
+            
+            # Add Einstein's response to chat history
+            st.session_state.chat_history.append({
+                'role': 'assistant',
+                'content': response_text
+            })
+            
+            # If avatar session is active, make the avatar speak
+            if st.session_state.player_ready and st.session_state.session_id:
+                with st.spinner("Making Einstein speak..."):
+                    task_data = send_message_to_avatar(st.session_state.session_id, response_text)
+            
+            # Refresh the display
+            st.rerun()
+            
+with file_tab:
+    # File upload option as a fallback
+    uploaded_file = st.file_uploader(file_upload_text, type=['wav', 'mp3'])
+    
+    if uploaded_file is not None:
+        audio_bytes = uploaded_file.read()
+        
+        st.audio(audio_bytes, format="audio/wav")
+        
+        if st.button("Process Audio"):
+            with st.spinner("Processing audio file..."):
+                # Process the uploaded audio with selected ASR provider
+                if asr_provider == "Google Speech Recognition":
+                    user_input = google_speech_recognition(
+                        audio_bytes, 
+                        "Korean" if app_language == "🇰🇷 한국어" else "English"
+                    )
+                else:  # OpenAI Whisper
+                    user_input = whisper_asr(audio_bytes)
+                
+                if user_input and user_input not in ["Could not understand audio", "Error processing audio", "Error with speech recognition service"]:
+                    st.success(f"Transcription: {user_input}")
                     
-                    if user_input and user_input not in ["Could not understand audio", "Error processing audio", "Error with speech recognition service"]:
-                        st.success(f"Transcription: {user_input}")
+                    # Detect the language of the user input
+                    detected_language = detect_language(user_input)
+                    st.session_state.user_language = detected_language
+                    
+                    # Add user message to chat history
+                    st.session_state.chat_history.append({
+                        'role': 'user',
+                        'content': user_input
+                    })
+                    
+                    # Get Einstein's response
+                    response_text = get_einstein_response(chat, user_input)
+                    st.session_state.current_response = response_text
+                    
+                    # Add Einstein's response to chat history
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': response_text
+                    })
+                    
+                    # If avatar session is active, make the avatar speak
+                    if st.session_state.player_ready and st.session_state.session_id:
+                        task_data = send_message_to_avatar(st.session_state.session_id, response_text)
                         
-                        # Detect the language of the user input
-                        detected_language = detect_language(user_input)
-                        st.session_state.user_language = detected_language
-                        
-                        # Add user message to chat history
-                        st.session_state.chat_history.append({
-                            'role': 'user',
-                            'content': user_input
-                        })
-                        
-                        # Get Einstein's response
-                        response_text = get_einstein_response(chat, user_input)
-                        st.session_state.current_response = response_text
-                        
-                        # Add Einstein's response to chat history
-                        st.session_state.chat_history.append({
-                            'role': 'assistant',
-                            'content': response_text
-                        })
-                        
-                        # If avatar session is active, make the avatar speak
-                        if st.session_state.player_ready and st.session_state.session_id:
-                            task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-                            
-                        # Refresh the display
-                        st.rerun()
-                    else:
-                        st.error(f"Failed to process audio: {user_input}")
+                    # Refresh the display
+                    st.rerun()
+                else:
+                    st.error(f"Failed to process audio. Please try again or use text input.")
 
 # Add a footer with version information and upgrade instructions
 st.markdown("---")
