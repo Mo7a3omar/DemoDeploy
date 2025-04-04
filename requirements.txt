@@ -5,3 +5,4 @@ requests==2.31.0
 SpeechRecognition==3.10.0
 langdetect==1.0.9
 uuid==1.30
+PyAudio==0.2.13
