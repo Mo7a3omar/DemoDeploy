@@ -24,6 +24,37 @@ default_gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 default_heygen_api_key = os.getenv("HEYGEN_API_KEY", "")
 default_openai_api_key = os.getenv("ELEVENLABS_API_KEY", "")  # Using ELEVENLABS key as an alternative for OpenAI
 
+# Setup speech recognition with proper error handling
+def setup_speech_recognition():
+    """Setup speech recognition with proper error handling"""
+    try:
+        import speech_recognition as sr
+        return True
+    except ImportError:
+        st.error("SpeechRecognition package is not installed. Please run 'pip install SpeechRecognition pyaudio'")
+        return False
+    except Exception as e:
+        st.error(f"Error setting up speech recognition: {e}")
+        return False
+
+# Check if PyAudio is properly installed
+def check_pyaudio():
+    """Check if PyAudio is properly installed for Windows users"""
+    try:
+        import pyaudio
+        return True
+    except ImportError:
+        st.warning("PyAudio is not installed. This is required for system microphone. On Windows, try running:")
+        st.code("pip install pipwin\npipwin install pyaudio")
+        return False
+    except Exception as e:
+        st.warning(f"PyAudio error: {e}. Browser microphone will be used instead.")
+        return False
+
+# Initialize speech recognition and pyaudio status
+speech_recognition_available = setup_speech_recognition()
+pyaudio_installed = check_pyaudio()
+
 # Sidebar configuration
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", width=250)
@@ -73,12 +104,115 @@ with st.sidebar:
         if openai_api_key:
             os.environ["OPENAI_API_KEY"] = openai_api_key
     
+    # Microphone source selection
+    st.markdown("### Microphone Source")
+    mic_source = st.radio(
+        "Microphone Source",
+        ["Browser Microphone", "System Microphone"],
+        index=0
+    )
+    
+    # Display microphone status
+    if mic_source == "System Microphone" and not pyaudio_installed:
+        st.warning("System microphone requires PyAudio. Using browser microphone instead.")
+    
     # Reload button
     if st.button("Reload with new API settings"):
         for key in ["chat", "session_id", "player_ready", "access_token", "url"]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
+
+# Create a browser-based audio recorder component
+def create_audio_recorder():
+    """Create a browser-based audio recorder component."""
+    audio_recorder_html = """
+    <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+        <button id="recordButton" style="background-color: #4CAF50; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Record</button>
+        <button id="stopButton" style="background-color: #f44336; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;" disabled>Stop</button>
+        <div id="recordingStatus" style="margin-top: 10px; font-style: italic;"></div>
+        <audio id="audioPlayback" controls style="display: none; width: 100%; margin-top: 10px;"></audio>
+    </div>
+    
+    <script>
+        const recordButton = document.getElementById('recordButton');
+        const stopButton = document.getElementById('stopButton');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const audioPlayback = document.getElementById('audioPlayback');
+        
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        
+        // Function to send data back to Streamlit
+        function sendToStreamlit(data) {
+            // Create a custom event to pass data to Streamlit
+            const event = new CustomEvent('streamlit:setComponentValue', {
+                detail: {
+                    value: data
+                }
+            });
+            window.dispatchEvent(event);
+        }
+        
+        // Setup recorder when Record button is clicked
+        recordButton.addEventListener('click', async () => {
+            audioChunks = [];
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                recordingStatus.textContent = "Recording... (speak now)";
+                recordButton.disabled = true;
+                stopButton.disabled = false;
+                
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    audioChunks.push(event.data);
+                });
+                
+                mediaRecorder.addEventListener('stop', () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayback.src = audioUrl;
+                    audioPlayback.style.display = 'block';
+                    
+                    // Convert to base64 and send to Streamlit
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = () => {
+                        // Remove the "data:audio/wav;base64," prefix
+                        const base64data = reader.result.split(',')[1];
+                        sendToStreamlit(base64data);
+                    };
+                    
+                    // Stop all audio tracks
+                    stream.getTracks().forEach(track => track.stop());
+                });
+                
+                mediaRecorder.start();
+            } catch (err) {
+                console.error("Error accessing microphone:", err);
+                recordingStatus.textContent = "Error: Could not access microphone. Please check permissions.";
+            }
+        });
+        
+        // Stop recording when Stop button is clicked
+        stopButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                recordingStatus.textContent = "Recording complete. Click play to review.";
+                recordButton.disabled = false;
+                stopButton.disabled = true;
+            }
+        });
+    </script>
+    """
+    
+    # Use a unique key for the component each time to avoid caching issues
+    component_value = components.html(audio_recorder_html, height=120, key=f"audio_recorder_{uuid.uuid4()}")
+    
+    return component_value
 
 # Initialize Einstein bot
 def initialize_einstein_bot():
@@ -151,6 +285,18 @@ def detect_language(text):
             return 'English'  # Default to English for all other languages
     except:
         return 'English'  # Default to English if detection fails
+
+# Function to check if microphone is available
+def is_microphone_available():
+    """Check if a microphone is available for recording with better error handling"""
+    try:
+        # Try to get the list of available microphones
+        import speech_recognition as sr
+        mics = sr.Microphone.list_microphone_names()
+        return len(mics) > 0
+    except (sr.RequestError, OSError, AttributeError) as e:
+        print(f"Error checking microphone: {e}")
+        return False
 
 # HeyGen API Functions
 def get_headers():
@@ -311,6 +457,9 @@ def stop_session(session_id):
 # Speech Recognition Functions - Modified version with error handling
 def google_speech_recognition(audio_bytes=None, language_hint=None):
     """Recognize speech using Google Speech Recognition with language hint"""
+    if not speech_recognition_available:
+        return "Speech recognition is not available"
+        
     recognizer = sr.Recognizer()
     
     # Check if we have audio data
@@ -392,6 +541,39 @@ def whisper_asr(audio_bytes, api_key=None):
             st.error(f"Whisper ASR Exception: {str(e)}")
             return "Error processing audio"
 
+# Process browser recording
+def process_browser_recording(audio_data):
+    """Process audio recorded from browser"""
+    with st.spinner("Processing browser recording..."):
+        try:
+            # Convert base64 to bytes
+            audio_bytes = base64.b64decode(audio_data)
+            
+            # Create a temporary file for the audio
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+                temp_audio.write(audio_bytes)
+                temp_audio_path = temp_audio.name
+            
+            # Process using selected ASR provider
+            if asr_provider == "Google Speech Recognition":
+                user_input = google_speech_recognition(
+                    audio_bytes, 
+                    "Korean" if st.session_state.get("user_language", default_language) == "Korean" else "English"
+                )
+            else:  # OpenAI Whisper
+                user_input = whisper_asr(audio_bytes)
+            
+            # Clean up temporary file
+            try:
+                os.remove(temp_audio_path)
+            except:
+                pass
+            
+            return user_input
+        except Exception as e:
+            st.error(f"Error processing browser recording: {str(e)}")
+            return None
+
 # Get Einstein's response to a user message
 def get_einstein_response(chat, user_message):
     """Get Einstein's response to a user message"""
@@ -472,16 +654,6 @@ def create_webrtc_player(url, token):
     # Render the HTML component
     return components.html(webrtc_code, height=500)
 
-# Function to check if microphone is available
-def is_microphone_available():
-    """Check if a microphone is available for recording"""
-    try:
-        # Try to initialize Microphone to see if any devices are available
-        with sr.Microphone() as source:
-            return True
-    except (sr.RequestError, OSError) as e:
-        return False
-
 # Initialize session state variables
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
@@ -498,7 +670,9 @@ if "current_response" not in st.session_state:
 if "user_language" not in st.session_state:
     st.session_state.user_language = "English"  # Default language
 if "microphone_available" not in st.session_state:
-    st.session_state.microphone_available = is_microphone_available()
+    st.session_state.microphone_available = is_microphone_available() and pyaudio_installed
+if "browser_mic_data" not in st.session_state:
+    st.session_state.browser_mic_data = None
 
 # Main app layout
 st.title("🧠 AI Einstein Avatar")
@@ -524,6 +698,9 @@ if app_language == "🇰🇷 한국어":
     stop_button_text = "아바타 세션 중지"
     session_info_text = "아인슈타인 아바타를 생생하게 만나보세요!"
     conversation_title = "대화"
+    browser_mic_text = "브라우저 마이크"
+    system_mic_text = "시스템 마이크"
+    record_browser_mic_text = "브라우저 마이크로 녹음하려면 여기를 클릭하세요"
     no_mic_text = "이 환경에서는 마이크를 사용할 수 없습니다. 오디오 파일을 업로드하거나 텍스트 입력을 사용하세요."
 else:
     welcome_text = "Ask me about science, physics, philosophy, and the mysteries of the universe!"
@@ -536,6 +713,9 @@ else:
     stop_button_text = "Stop Avatar Session"
     session_info_text = "Start the avatar session to see Einstein come to life!"
     conversation_title = "Conversation"
+    browser_mic_text = "Browser Microphone"
+    system_mic_text = "System Microphone" 
+    record_browser_mic_text = "Click here to record using browser microphone"
     no_mic_text = "Microphone is not available in this environment. Please use text input or upload an audio file instead."
 
 st.markdown(welcome_text)
@@ -584,6 +764,7 @@ with col1:
         
         # Placeholder avatar image when no session is active
         st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", width=400)
+
 
 with col2:
     # Chat history and interface
@@ -745,4 +926,4 @@ with col2:
                     task_data = send_message_to_avatar(st.session_state.session_id, response_text)
             
             # Refresh the display
-            st.rerun()
+            st.rerun()  
