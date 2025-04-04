@@ -6,4 +6,4 @@ SpeechRecognition==3.10.0
 langdetect==1.0.9
 uuid==1.30
 PyAudio==0.2.13
-Copystreamlit-nightly>=1.33.0
+streamlit-nightly>=1.33.0
