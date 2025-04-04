@@ -308,11 +308,15 @@ def stop_session(session_id):
             st.error(f"Error stopping session: {e}")
             return False
 
-# Speech Recognition Functions
-def google_speech_recognition(audio_bytes, language_hint=None):
+# Speech Recognition Functions - Modified version with error handling
+def google_speech_recognition(audio_bytes=None, language_hint=None):
     """Recognize speech using Google Speech Recognition with language hint"""
     recognizer = sr.Recognizer()
     
+    # Check if we have audio data
+    if audio_bytes is None:
+        return "No audio data provided"
+        
     # Create a unique filename in a temporary directory
     user_temp_dir = os.path.join(os.path.expanduser("~"), "einstein_temp")
     os.makedirs(user_temp_dir, exist_ok=True)
@@ -468,6 +472,16 @@ def create_webrtc_player(url, token):
     # Render the HTML component
     return components.html(webrtc_code, height=500)
 
+# Function to check if microphone is available
+def is_microphone_available():
+    """Check if a microphone is available for recording"""
+    try:
+        # Try to initialize Microphone to see if any devices are available
+        with sr.Microphone() as source:
+            return True
+    except (sr.RequestError, OSError) as e:
+        return False
+
 # Initialize session state variables
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
@@ -483,6 +497,8 @@ if "current_response" not in st.session_state:
     st.session_state.current_response = None
 if "user_language" not in st.session_state:
     st.session_state.user_language = "English"  # Default language
+if "microphone_available" not in st.session_state:
+    st.session_state.microphone_available = is_microphone_available()
 
 # Main app layout
 st.title("🧠 AI Einstein Avatar")
@@ -500,6 +516,7 @@ with language_col2:
 if app_language == "🇰🇷 한국어":
     welcome_text = "과학, 물리학, 철학, 그리고 우주의 신비에 대해 저에게 물어보세요!"
     voice_button_text = "🎤 음성으로 질문하기"
+    upload_button_text = "🎵 오디오 파일 업로드"
     listen_text = "듣고 있습니다..."
     text_input_label = "과학과 우주에 대해 아인슈타인에게 질문하세요:"
     send_button_text = "보내기"
@@ -507,9 +524,11 @@ if app_language == "🇰🇷 한국어":
     stop_button_text = "아바타 세션 중지"
     session_info_text = "아인슈타인 아바타를 생생하게 만나보세요!"
     conversation_title = "대화"
+    no_mic_text = "이 환경에서는 마이크를 사용할 수 없습니다. 오디오 파일을 업로드하거나 텍스트 입력을 사용하세요."
 else:
     welcome_text = "Ask me about science, physics, philosophy, and the mysteries of the universe!"
     voice_button_text = "🎤 Record Voice Input"
+    upload_button_text = "🎵 Upload Audio File"
     listen_text = "Speak now..."
     text_input_label = "Ask Einstein about science and the universe:"
     send_button_text = "Send"
@@ -517,6 +536,7 @@ else:
     stop_button_text = "Stop Avatar Session"
     session_info_text = "Start the avatar session to see Einstein come to life!"
     conversation_title = "Conversation"
+    no_mic_text = "Microphone is not available in this environment. Please use text input or upload an audio file instead."
 
 st.markdown(welcome_text)
 
@@ -584,56 +604,114 @@ with col2:
                 else:
                     st.markdown(f"**Einstein:** {message['content']}")
     
-    # Voice input option
-    if st.button(voice_button_text):
-        with st.spinner("Listening..."):
-            try:
-                # Record audio using microphone
-                recognizer = sr.Recognizer()
-                with sr.Microphone() as source:
-                    st.info(listen_text)
-                    audio_data = recognizer.listen(source, timeout=5)
-                    audio_bytes = audio_data.get_wav_data()
-                
-                # Process the recorded audio with selected ASR provider
-                # Use the current language setting for Google speech recognition
-                if asr_provider == "Google Speech Recognition":
-                    user_input = google_speech_recognition(
-                        audio_bytes, 
-                        "Korean" if app_language == "🇰🇷 한국어" else "English"
-                    )
-                else:  # OpenAI Whisper - automatically detects language
-                    user_input = whisper_asr(audio_bytes)
-                
-                if user_input and user_input != "Could not understand audio" and user_input != "Error with speech recognition service":
-                    # Detect the language of the user input
-                    detected_language = detect_language(user_input)
-                    st.session_state.user_language = detected_language
+    # Voice input options
+    input_col1, input_col2 = st.columns(2)
+    
+    # Check if microphone is available
+    mic_available = st.session_state.microphone_available
+    
+    with input_col1:
+        # Voice recording button - only show if mic is available
+        if mic_available:
+            if st.button(voice_button_text):
+                with st.spinner("Listening..."):
+                    try:
+                        # Record audio using microphone
+                        recognizer = sr.Recognizer()
+                        with sr.Microphone() as source:
+                            st.info(listen_text)
+                            audio_data = recognizer.listen(source, timeout=5)
+                            audio_bytes = audio_data.get_wav_data()
+                        
+                        # Process the recorded audio with selected ASR provider
+                        if asr_provider == "Google Speech Recognition":
+                            user_input = google_speech_recognition(
+                                audio_bytes, 
+                                "Korean" if app_language == "🇰🇷 한국어" else "English"
+                            )
+                        else:  # OpenAI Whisper - automatically detects language
+                            user_input = whisper_asr(audio_bytes)
+                        
+                        if user_input and user_input != "Could not understand audio" and user_input != "Error with speech recognition service":
+                            # Detect the language of the user input
+                            detected_language = detect_language(user_input)
+                            st.session_state.user_language = detected_language
+                            
+                            # Add user message to chat history
+                            st.session_state.chat_history.append({
+                                'role': 'user',
+                                'content': user_input
+                            })
+                            
+                            # Get Einstein's response
+                            response_text = get_einstein_response(chat, user_input)
+                            st.session_state.current_response = response_text
+                            
+                            # Add Einstein's response to chat history
+                            st.session_state.chat_history.append({
+                                'role': 'assistant',
+                                'content': response_text
+                            })
+                            
+                            # If avatar session is active, make the avatar speak
+                            if st.session_state.player_ready and st.session_state.session_id:
+                                task_data = send_message_to_avatar(st.session_state.session_id, response_text)
+                            
+                            # Refresh the display
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error during voice recording: {str(e)}")
+        else:
+            # Show warning if microphone is not available
+            st.warning(no_mic_text)
+    
+    with input_col2:
+        # Audio file upload option - show for everyone but especially important when mic isn't available
+        uploaded_file = st.file_uploader(upload_button_text, type=['wav', 'mp3'])
+        if uploaded_file is not None:
+            with st.spinner("Processing audio..."):
+                try:
+                    # Read the uploaded file
+                    audio_bytes = uploaded_file.read()
                     
-                    # Add user message to chat history
-                    st.session_state.chat_history.append({
-                        'role': 'user',
-                        'content': user_input
-                    })
+                    # Process the audio file with selected ASR provider
+                    if asr_provider == "Google Speech Recognition":
+                        user_input = google_speech_recognition(
+                            audio_bytes, 
+                            "Korean" if app_language == "🇰🇷 한국어" else "English"
+                        )
+                    else:  # OpenAI Whisper - automatically detects language
+                        user_input = whisper_asr(audio_bytes)
                     
-                    # Get Einstein's response
-                    response_text = get_einstein_response(chat, user_input)
-                    st.session_state.current_response = response_text
-                    
-                    # Add Einstein's response to chat history
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': response_text
-                    })
-                    
-                    # If avatar session is active, make the avatar speak
-                    if st.session_state.player_ready and st.session_state.session_id:
-                        task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-                    
-                    # Refresh the display
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error during voice recording: {str(e)}")
+                    if user_input and user_input != "Could not understand audio" and user_input != "Error with speech recognition service":
+                        # Detect the language of the user input
+                        detected_language = detect_language(user_input)
+                        st.session_state.user_language = detected_language
+                        
+                        # Add user message to chat history
+                        st.session_state.chat_history.append({
+                            'role': 'user',
+                            'content': user_input
+                        })
+                        
+                        # Get Einstein's response
+                        response_text = get_einstein_response(chat, user_input)
+                        st.session_state.current_response = response_text
+                        
+                        # Add Einstein's response to chat history
+                        st.session_state.chat_history.append({
+                            'role': 'assistant',
+                            'content': response_text
+                        })
+                        
+                        # If avatar session is active, make the avatar speak
+                        if st.session_state.player_ready and st.session_state.session_id:
+                            task_data = send_message_to_avatar(st.session_state.session_id, response_text)
+                        
+                        # Refresh the display
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error processing audio file: {str(e)}")
     
     # Text input
     with st.form(key="message_form", clear_on_submit=True):
