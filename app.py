@@ -12,19 +12,56 @@ import speech_recognition as sr
 import uuid
 from langdetect import detect
 
-# Set page configuration
-st.set_page_config(page_title="AI Einstein Avatar", page_icon="🧠", layout="wide")
+# Set page configuration for tablet
+st.set_page_config(
+    page_title="AI Einstein", 
+    page_icon="🧠", 
+    layout="wide",
+    initial_sidebar_state="collapsed"  # Hide sidebar by default for more tablet space
+)
 
-# Load environment variables first (before sidebar is rendered)
+# Add custom CSS for tablet-friendly UI
+st.markdown("""
+<style>
+    /* Make buttons larger and more touch-friendly */
+    .stButton button {
+        height: 3rem;
+        font-size: 1.2rem;
+        padding: 0.5rem 1rem;
+        width: 100%;
+    }
+    
+    /* Improve spacing for tablet */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        max-width: 1000px;
+    }
+    
+    /* Make radio buttons larger and more touch-friendly */
+    .stRadio div[role="radiogroup"] label {
+        font-size: 1.2rem;
+        padding: 0.75rem;
+    }
+    
+    /* Improve header for tablets */
+    h1 {
+        font-size: 2.5rem !important;
+        text-align: center;
+        margin-bottom: 1rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Load environment variables
 load_dotenv()
 
 # Get API keys from environment variables with fallbacks to empty strings
-# IMPORTANT: Don't show these in the UI
 default_gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 default_heygen_api_key = os.getenv("HEYGEN_API_KEY", "")
 default_openai_api_key = os.getenv("ELEVENLABS_API_KEY", "")  # Using ELEVENLABS key as an alternative for OpenAI
 
-# Use the environment variables directly instead of letting users input them
+# Use the environment variables directly
 gemini_api_key = default_gemini_api_key
 heygen_api_key = default_heygen_api_key
 openai_api_key = default_openai_api_key
@@ -35,46 +72,11 @@ if gemini_api_key:
 if openai_api_key:
     os.environ["OPENAI_API_KEY"] = openai_api_key
 
-# Sidebar configuration
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", width=250)
-    st.markdown("## AI Einstein Configuration")
-    
-    # Remove API Keys section from sidebar
-    
-    # Avatar configuration
-    st.markdown("### Avatar Settings")
-    avatar_id = st.text_input("Avatar ID", value="Ann_Therapist_public")
-    
-    # Language selection
-    st.markdown("### Language Settings")
-    default_language = st.selectbox(
-        "Default Language",
-        ["English", "Korean"],
-        index=0
-    )
-    
-    # Voice selection based on language
-    if default_language == "English":
-        voice_id = st.text_input("Voice ID", value="1bd001e7e50f421d891986aad5158bc8")
-    else:  # Korean
-        voice_id = st.text_input("Voice ID", value="1bd001e7e50f421d891986aad5158bc8")  # Replace with Korean voice ID
-    
-    # Voice recognition configuration
-    st.markdown("### Speech Recognition")
-    asr_provider = st.selectbox(
-        "Speech Recognition Provider",
-        ["Google Speech Recognition", "OpenAI Whisper"]
-    )
-    
-    # Removed OpenAI API Key input field
-    
-    # Reload button
-    if st.button("Reload with new settings"):
-        for key in ["chat", "session_id", "player_ready", "access_token", "url"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
+# Define default settings without sidebar
+avatar_id = "a09036af91434e2d8385dc887a7c9a95"
+default_language = "English"
+voice_id = "1985984feded457b9d013b4f6551ac94"
+asr_provider = "Google Speech Recognition"
 
 # Initialize Einstein bot
 def initialize_einstein_bot():
@@ -315,7 +317,6 @@ def google_speech_recognition(audio_bytes, language_hint=None):
     try:
         # Convert audio bytes to AudioData directly
         # This assumes the audio is in the correct format (WAV)
-        # You might need to adjust this if you're working with different formats
         with io.BytesIO(audio_bytes) as audio_io:
             with wave.open(audio_io, 'rb') as wave_file:
                 frame_rate = wave_file.getframerate()
@@ -345,7 +346,7 @@ def whisper_asr(audio_bytes, api_key=None):
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            st.error("Speech recognition is currently unavailable. Please try text input instead.")
+            st.error("Speech recognition is currently unavailable. Please try again.")
             return "Speech recognition service unavailable"
     
     url = "https://api.openai.com/v1/audio/transcriptions"
@@ -368,10 +369,10 @@ def whisper_asr(audio_bytes, api_key=None):
                 if response.status_code == 200:
                     return response.json().get("text", "")
                 else:
-                    st.error(f"Speech recognition error. Please try text input instead.")
+                    st.error(f"Speech recognition error. Please try voice input again.")
                     return "Error with speech recognition service"
         except Exception as e:
-            st.error(f"Error processing audio. Please try text input instead.")
+            st.error(f"Error processing audio. Please try again.")
             return "Error processing audio"
 
 # Get Einstein's response to a user message
@@ -388,12 +389,12 @@ def get_einstein_response(chat, user_message):
         # Return bilingual error message
         return "Forgive me, but I cannot answer at this moment. Perhaps we should try another question? / 죄송합니다만, 지금은 답변할 수 없습니다. 다른 질문을 해보시겠어요?"
 
-# WebRTC player component
+# WebRTC player component with original dimensions
 def create_webrtc_player(url, token):
-    """Create a WebRTC player for HeyGen avatar"""
+    """Create a WebRTC player for HeyGen avatar with original dimensions"""
     webrtc_code = f"""
-    <div id="video-container" style="width: 100%; height: 480px; background-color: #000;">
-        <video id="avatar-video" autoplay playsinline style="width: 100%; height: 100%;"></video>
+    <div id="video-container" style="width: 100%; height: 600px; background-color: #000; border-radius: 12px; overflow: hidden;">
+        <video id="avatar-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
     </div>
     
     <script>
@@ -442,7 +443,7 @@ def create_webrtc_player(url, token):
             
         }} catch (error) {{
             console.error('Error connecting to LiveKit:', error);
-            document.getElementById('video-container').innerHTML = '<div style="color: white; padding: 20px;">Error connecting to video stream. Please check console for details.</div>';
+            document.getElementById('video-container').innerHTML = '<div style="color: white; padding: 20px; text-align: center; font-size: 1.2rem;">Error connecting to video stream. Please try again.</div>';
         }}
     }}
     
@@ -452,7 +453,7 @@ def create_webrtc_player(url, token):
     """
     
     # Render the HTML component
-    return components.html(webrtc_code, height=500)
+    return components.html(webrtc_code, height=640)
 
 # Initialize session state variables
 if "session_id" not in st.session_state:
@@ -473,57 +474,43 @@ if "user_language" not in st.session_state:
 # Check if streamlit-nightly's audio_input is available
 has_audio_input = hasattr(st, 'audio_input')
 
-# Main app layout
-st.title("🧠 AI Einstein Avatar")
+# Main app layout - optimized for tablet
+st.title("AI Einstein")
 
-# Create a language toggle in the main interface
-language_col1, language_col2 = st.columns([3, 1])
-with language_col2:
-    app_language = st.radio(
-        "Interface Language:", 
-        ["🇺🇸 English", "🇰🇷 한국어"],
-        horizontal=True
-    )
+# Create a language toggle in the main interface - made more touch-friendly
+app_language = st.radio(
+    "Interface Language:", 
+    ["🇺🇸 English", "🇰🇷 한국어"],
+    horizontal=True,
+    key="language_selector"
+)
 
 # Set interface language text based on selection
 if app_language == "🇰🇷 한국어":
-    welcome_text = "과학, 물리학, 철학, 그리고 우주의 신비에 대해 저에게 물어보세요!"
-    voice_button_text = "🎤 음성으로 질문하기"
     listen_text = "듣고 있습니다..."
-    text_input_label = "과학과 우주에 대해 아인슈타인에게 질문하세요:"
-    send_button_text = "보내기"
     start_button_text = "아바타 세션 시작"
     stop_button_text = "아바타 세션 중지"
     session_info_text = "아인슈타인 아바타를 생생하게 만나보세요!"
-    conversation_title = "대화"
     audio_record_text = "🎤 녹음 시작"
     audio_stop_text = "⏹️ 녹음 중지"
-    file_upload_text = "오디오 파일 업로드"
-    audio_not_available = "음성 입력이 현재 버전의 Streamlit에서 지원되지 않습니다. 텍스트로 질문해 주세요."
+    audio_not_available = "음성 입력이 현재 버전의 Streamlit에서 지원되지 않습니다."
 else:
-    welcome_text = "Ask me about science, physics, philosophy, and the mysteries of the universe!"
-    voice_button_text = "🎤 Record Voice Input"
     listen_text = "Speak now..."
-    text_input_label = "Ask Einstein about science and the universe:"
-    send_button_text = "Send"
     start_button_text = "Start Avatar Session"
     stop_button_text = "Stop Avatar Session"
     session_info_text = "Start the avatar session to see Einstein come to life!"
-    conversation_title = "Conversation"
     audio_record_text = "🎤 Start Recording"
     audio_stop_text = "⏹️ Stop Recording"
-    file_upload_text = "Upload Audio File"
-    audio_not_available = "Audio input is not supported in this version of Streamlit. Please ask your questions using text."
+    audio_not_available = "Audio input is not supported in this version of Streamlit."
 
 # Initialize the Einstein bot
 chat = initialize_einstein_bot()
 
-# Avatar session controls
+# Avatar session controls - optimized for tablet touch
 col1, col2 = st.columns(2)
 
 with col1:
-    # Check if HeyGen API key is available (either from .env or user input)
-    if st.button(start_button_text, disabled=(not heygen_api_key)):
+    if st.button(start_button_text, disabled=(not heygen_api_key), key="start_button", use_container_width=True):
         if heygen_api_key:
             # Create and start a new session
             session_data = create_session()
@@ -539,181 +526,66 @@ with col1:
             st.error("Avatar service is currently unavailable. Please try again later.")
 
 with col2:
-    if st.button(stop_button_text, disabled=not st.session_state.session_id):
+    if st.button(stop_button_text, disabled=not st.session_state.session_id, key="stop_button", use_container_width=True):
         if st.session_state.session_id:
             if stop_session(st.session_state.session_id):
                 st.session_state.session_id = None
                 st.session_state.player_ready = False
                 st.rerun()
 
-# Layout design with columns for avatar and chat
-col1, col2 = st.columns([2, 1])
+# Layout design for avatar - optimized for tablet
+if st.session_state.player_ready:
+    # Display the avatar in full width with original dimensions
+    create_webrtc_player(st.session_state.url, st.session_state.access_token)
+else:
+    # When no session, show a placeholder and explanation
+    st.info(session_info_text)
+    
+    # Placeholder avatar image when no session is active - centered for tablet
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", use_container_width=True)
 
-with col1:
-    # Display the avatar if session is ready
-    if st.session_state.player_ready:
-        st.subheader("Einstein Avatar")
-        create_webrtc_player(st.session_state.url, st.session_state.access_token)
-    else:
-        st.info(session_info_text)
-        
-        # Placeholder avatar image when no session is active
-        st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", width=400)
-
-with col2:
-    # Chat history and interface
-    st.subheader(conversation_title)
+# Voice input section - optimized for tablet
+if has_audio_input:
+    # Using the new streamlit-nightly audio_input feature with larger button for tablet
+    st.markdown(f"### {listen_text}")
+    audio_bytes = st.audio_input(label=listen_text)
     
-    # Create a container for chat history
-    chat_container = st.container(height=400)
-    with chat_container:
-        for message in st.session_state.chat_history:
-            if message['role'] == 'user':
-                if app_language == "🇰🇷 한국어":
-                    st.markdown(f"**나:** {message['content']}")
-                else:
-                    st.markdown(f"**You:** {message['content']}")
-            else:
-                if app_language == "🇰🇷 한국어":
-                    st.markdown(f"**아인슈타인:** {message['content']}")
-                else:
-                    st.markdown(f"**Einstein:** {message['content']}")
-    
-    # Audio input options with file uploader as fallback
-    # Check if we have st.audio_input available (from streamlit-nightly)
-    audio_tab, text_tab, file_tab = st.tabs(["Voice Input", "Text Input", "File Upload"])
-    
-with audio_tab:
-    if has_audio_input:
-        # Using the new streamlit-nightly audio_input feature
-        st.write(listen_text)
-        audio_bytes = st.audio_input(label=listen_text)
+    if audio_bytes is not None:
+        # Create a unique key for this audio input
+        audio_id = str(uuid.uuid4())
         
-        if audio_bytes is not None:
-            # Create a unique key for this audio input
-            audio_id = str(uuid.uuid4())
-            
-            # Check if this audio has been processed before
-            if "last_processed_audio" not in st.session_state:
-                st.session_state.last_processed_audio = None
-            
-            # Process only if this is new audio data
-            current_audio_hash = hash(audio_bytes.read())
-            audio_bytes.seek(0)  # Reset file pointer after reading
-            
-            if current_audio_hash != st.session_state.last_processed_audio:
-                with st.spinner("Processing audio..."):
-                    # Mark this audio as processed
-                    st.session_state.last_processed_audio = current_audio_hash
-                    
-                    # Process the recorded audio with selected ASR provider
-                    audio_data = audio_bytes.read()  # Get the bytes
-                    
-                    if asr_provider == "Google Speech Recognition":
-                        user_input = google_speech_recognition(
-                            audio_data, 
-                            "Korean" if app_language == "🇰🇷 한국어" else "English"
-                        )
-                    else:  # OpenAI Whisper
-                        user_input = whisper_asr(audio_data)
-                    
-                    if user_input and user_input not in ["Could not understand audio", "Error processing audio", "Error with speech recognition service"]:
-                        # Detect the language of the user input
-                        detected_language = detect_language(user_input)
-                        st.session_state.user_language = detected_language
-                        
-                        # Add user message to chat history
-                        st.session_state.chat_history.append({
-                            'role': 'user',
-                            'content': user_input
-                        })
-                        
-                        # Get Einstein's response
-                        response_text = get_einstein_response(chat, user_input)
-                        st.session_state.current_response = response_text
-                        
-                        # Add Einstein's response to chat history
-                        st.session_state.chat_history.append({
-                            'role': 'assistant',
-                            'content': response_text
-                        })
-                        
-                        # If avatar session is active, make the avatar speak
-                        if st.session_state.player_ready and st.session_state.session_id:
-                            task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-                        
-                        # Refresh the display
-                        st.rerun()
-    else:
-        # Show message when audio_input is not available
-        st.warning(audio_not_available)
+        # Check if this audio has been processed before
+        if "last_processed_audio" not in st.session_state:
+            st.session_state.last_processed_audio = None
         
-        # Suggest file upload as alternative
-        st.write("You can use the 'File Upload' tab to upload audio recordings instead.")
-    
-with text_tab:
-    # Text input
-    with st.form(key="message_form", clear_on_submit=True):
-        user_input = st.text_input(text_input_label)
-        submit = st.form_submit_button(send_button_text)
+        # Process only if this is new audio data
+        current_audio_hash = hash(audio_bytes.read())
+        audio_bytes.seek(0)  # Reset file pointer after reading
         
-        if submit and user_input:
-            # Detect the language of the user input
-            detected_language = detect_language(user_input)
-            st.session_state.user_language = detected_language
-            
-            # Add user message to chat history
-            st.session_state.chat_history.append({
-                'role': 'user',
-                'content': user_input
-            })
-            
-            # Get Einstein's response
-            response_text = get_einstein_response(chat, user_input)
-            st.session_state.current_response = response_text
-            
-            # Add Einstein's response to chat history
-            st.session_state.chat_history.append({
-                'role': 'assistant',
-                'content': response_text
-            })
-            
-            # If avatar session is active, make the avatar speak
-            if st.session_state.player_ready and st.session_state.session_id:
-                with st.spinner("Making Einstein speak..."):
-                    task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-            
-            # Refresh the display
-            st.rerun()
-            
-with file_tab:
-    # File upload option as a fallback
-    uploaded_file = st.file_uploader(file_upload_text, type=['wav', 'mp3'])
-    
-    if uploaded_file is not None:
-        audio_bytes = uploaded_file.read()
-        
-        st.audio(audio_bytes, format="audio/wav")
-        
-        if st.button("Process Audio"):
-            with st.spinner("Processing audio file..."):
-                # Process the uploaded audio with selected ASR provider
+        if current_audio_hash != st.session_state.last_processed_audio:
+            with st.spinner("Processing audio..."):
+                # Mark this audio as processed
+                st.session_state.last_processed_audio = current_audio_hash
+                
+                # Process the recorded audio with selected ASR provider
+                audio_data = audio_bytes.read()  # Get the bytes
+                
                 if asr_provider == "Google Speech Recognition":
                     user_input = google_speech_recognition(
-                        audio_bytes, 
+                        audio_data, 
                         "Korean" if app_language == "🇰🇷 한국어" else "English"
                     )
                 else:  # OpenAI Whisper
-                    user_input = whisper_asr(audio_bytes)
+                    user_input = whisper_asr(audio_data)
                 
                 if user_input and user_input not in ["Could not understand audio", "Error processing audio", "Error with speech recognition service"]:
-                    st.success(f"Transcription: {user_input}")
-                    
                     # Detect the language of the user input
                     detected_language = detect_language(user_input)
                     st.session_state.user_language = detected_language
                     
-                    # Add user message to chat history
+                    # We still add to chat history internally but don't display it
                     st.session_state.chat_history.append({
                         'role': 'user',
                         'content': user_input
@@ -723,7 +595,7 @@ with file_tab:
                     response_text = get_einstein_response(chat, user_input)
                     st.session_state.current_response = response_text
                     
-                    # Add Einstein's response to chat history
+                    # We still track responses internally but don't display them
                     st.session_state.chat_history.append({
                         'role': 'assistant',
                         'content': response_text
@@ -732,16 +604,17 @@ with file_tab:
                     # If avatar session is active, make the avatar speak
                     if st.session_state.player_ready and st.session_state.session_id:
                         task_data = send_message_to_avatar(st.session_state.session_id, response_text)
-                        
+                    
                     # Refresh the display
                     st.rerun()
-                else:
-                    st.error(f"Failed to process audio. Please try again or use text input.")
+else:
+    # Show message when audio_input is not available - more compact for tablet
+    st.warning(audio_not_available)
+    st.info("💡 Voice input requires Streamlit nightly: `pip install --upgrade streamlit-nightly`")
 
-# Add a footer with version information and upgrade instructions
-st.markdown("---")
-if not has_audio_input:
-    st.info(
-        "💡 For better voice input support, upgrade to Streamlit nightly: "
-        "`pip install --upgrade streamlit-nightly`"
-    )
+# Add a small footer with version info - useful for tablets
+st.markdown("""
+<div style="text-align: center; margin-top: 20px; opacity: 0.7; font-size: 0.8rem;">
+    AI Einstein Avatar v1.0 - Voice-only interface
+</div>
+""", unsafe_allow_html=True)
