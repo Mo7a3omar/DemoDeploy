@@ -544,7 +544,8 @@ else:
     # Placeholder avatar image when no session is active - centered for tablet
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("https://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg", use_container_width=True)
+            st.markdown("### Einstein Avatar")
+            st.markdown("*Press 'Start Avatar Session' to begin*")
 
 # Voice input section - optimized for tablet
 if has_audio_input:
